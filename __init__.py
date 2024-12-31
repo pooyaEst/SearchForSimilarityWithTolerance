@@ -1,2 +1,2 @@
-from .SearchForSimilarityWithTolerance.main import sayHello
+from .Modules.main import sayHello
 __all__ = ["sayHello"]
