@@ -1,3 +1,3 @@
-from . import *
+from .main import *
 #empty init file
 print('Hena')
