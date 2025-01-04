@@ -1,3 +1,3 @@
-#from . import sayHello
+from . import *
 #empty init file
 print('Hena')
