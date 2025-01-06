@@ -1,6 +1,5 @@
 from cdifflib import CSequenceMatcher
 
-difflib.SequenceMatcher = CSequenceMatcher
 matcher = CSequenceMatcher(None,text.lower(),text2.lower(),autojunk=False)
 longest_match = matcher.find_longest_match()
 text[longest_match.a:longest_match.a+longest_match.size]
