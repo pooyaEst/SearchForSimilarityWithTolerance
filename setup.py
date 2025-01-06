@@ -6,5 +6,6 @@ setup(
     packages=find_packages(),
     install_requires=[
         # dependencies from requirements.txt
+        'cdifflib >= 1.2.6'
     ],
 )
