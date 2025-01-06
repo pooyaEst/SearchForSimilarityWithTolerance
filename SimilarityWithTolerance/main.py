@@ -3,9 +3,9 @@ from cdifflib import CSequenceMatcher
 # positions = [(4419, 4468), (5347, 5409), (5413, 5563), (5565, 5595),(5999, 6095)]
 def findSimilarPatterns(text,text2):
   matcher = CSequenceMatcher(None,text.lower(),text2.lower(),autojunk=False)
-  longest_match = matcher.find_longest_match()
-  text[longest_match.a:longest_match.a+longest_match.size]
-  text2[longest_match.b:longest_match.b+longest_match.size]
+ # longest_match = matcher.find_longest_match()
+ # text[longest_match.a:longest_match.a+longest_match.size]
+  #text2[longest_match.b:longest_match.b+longest_match.size]
 
   positions = []
   for matched in sorted(matcher.get_matching_blocks(),key=lambda matched:matched.size,reverse=True):
