@@ -1,8 +1,7 @@
-import difflib 
 from cdifflib import CSequenceMatcher
 
 difflib.SequenceMatcher = CSequenceMatcher
-matcher = SequenceMatcher(None,text.lower(),text2.lower(),autojunk=False)
+matcher = CSequenceMatcher(None,text.lower(),text2.lower(),autojunk=False)
 longest_match = matcher.find_longest_match()
 text[longest_match.a:longest_match.a+longest_match.size]
 text2[longest_match.b:longest_match.b+longest_match.size]
