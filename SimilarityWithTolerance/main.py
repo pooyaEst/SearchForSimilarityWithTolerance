@@ -65,6 +65,9 @@ def findSimilarPatterns(text,text2):
 
   positions.sort(key=lambda pair:pair[0])
 
+  if len(positions)==0:
+    return []
+
   a_start = positions[0][0]
   a_end = positions[0][1]
   b_start = positions[0][2]
@@ -74,7 +77,7 @@ def findSimilarPatterns(text,text2):
   for i in range(len(positions)):
     difference_with_prev = positions[i][0] - a_end
 
-    if difference_with_prev < 20:
+    if difference_with_prev < 10:
       a_end = positions[i][1]
       b_end = positions[i][3]
 
