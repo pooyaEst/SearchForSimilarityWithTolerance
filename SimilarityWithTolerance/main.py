@@ -1,92 +1,112 @@
-def get_matching_blocks_fast(a: str, b: str, min_size: int = 20):
+import re
+from cdifflib import CSequenceMatcher # Using the C version for speed
+
+# This function tokenizes text into words and also stores their character offsets
+def get_words_with_offsets(text_input):
+    words = []
+    # Store (char_start_offset, char_end_offset) for each word
+    char_offsets = []
+    # Using \S+ to capture sequences of non-whitespace characters as words.
+    # The .lower() is applied to the whole text once before this function if needed.
+    for match in re.finditer(r'\S+', text_input):
+        words.append(match.group(0)) # Store the word itself (could be omitted if only offsets needed for matcher)
+        char_offsets.append((match.start(), match.end()))
+    return words, char_offsets
+
+def findSimilarPatterns_word_based(text1_orig, text2_orig, min_word_match_length=10, merge_gap_threshold=20):
     """
-    Find matching blocks between two strings, ignoring matches smaller than min_size.
-    Returns list of tuples (i, j, size) where:
-        - i is the start index in string a
-        - j is the start index in string b
-        - size is the length of the match
-    
-    Much faster than difflib for long strings when only interested in substantial matches.
+    Finds similar patterns between two texts using a word-based approach with CSequenceMatcher.
+
+    Args:
+        text1_orig (str): The first text.
+        text2_orig (str): The second text.
+        min_word_match_length (int): The minimum number of words for a match to be considered.
+        merge_gap_threshold (int): The maximum character gap in text1 for merging adjacent matches.
+
+    Returns:
+        list: A list of tuples, where each tuple is (a_start, a_end, b_start, b_end)
+              representing the character offsets of the merged similar patterns
+              in text1_orig and text2_orig respectively.
     """
-    # Create dictionary of all possible substring positions in b
-    substrings = {}
-    for i in range(len(b) - min_size + 1):
-        substr = b[i:i + min_size]
-        if substr not in substrings:
-            substrings[substr] = []
-        substrings[substr].append(i)
+    # Lowercase texts once at the beginning
+    text1_lower = text1_orig.lower()
+    text2_lower = text2_orig.lower()
+
+    words1, offsets1 = get_words_with_offsets(text1_lower)
+    words2, offsets2 = get_words_with_offsets(text2_lower)
+
+    # If either text has no words, no matches are possible.
+    if not words1 or not words2:
+        return []
+
+    # Initialize CSequenceMatcher with lists of words
+    matcher = CSequenceMatcher(None, words1, words2, autojunk=False)
+
+    raw_matches_char_offsets = []
+    for block in matcher.get_matching_blocks():
+        # block.a: start index in words1
+        # block.b: start index in words2
+        # block.size: number of matching words
+        if block.size == 0: # Skip the terminating sentinel block if present
+            continue
+
+        if block.size >= min_word_match_length:
+            # Convert word indices back to character offsets using the stored offsets
+            # Ensure indices are valid (get_matching_blocks should provide valid ones)
+            orig_a_char_start = offsets1[block.a][0]
+            # End offset is the end of the last word in the match
+            orig_a_char_end = offsets1[block.a + block.size - 1][1]
+
+            orig_b_char_start = offsets2[block.b][0]
+            orig_b_char_end = offsets2[block.b + block.size - 1][1]
+            
+            # Optional: If you still need to filter by character length of the stripped match
+            # (as in your original code with `len(text_to_display) > 20`), you could add it here:
+            # matched_text_segment_a = text1_orig[orig_a_char_start:orig_a_char_end]
+            # if len(matched_text_segment_a.strip()) <= 20: # Example character threshold
+            #     continue
+
+            raw_matches_char_offsets.append(
+                (orig_a_char_start, orig_a_char_end, orig_b_char_start, orig_b_char_end)
+            )
+
+    if not raw_matches_char_offsets:
+        return []
+
+    # Sort matches by their start position in the first text (text1_orig) for merging.
+    # The original code sorted by size first, then by position.
+    # Sorting by start position is crucial for the merging logic.
+    # get_matching_blocks already returns blocks typically ordered by their appearance in sequence a.
+    # If they are not strictly sorted by a_start, this sort is essential.
+    positions_sorted = sorted(raw_matches_char_offsets, key=lambda m: m[0])
     
-    # Find matches
-    matches = []
-    i = 0
-    while i < len(a) - min_size + 1:
-        substr = a[i:i + min_size]
-        if substr in substrings:
-            # Found a potential match, try to extend it
-            for j in substrings[substr]:
-                # Extend match forward
-                size = min_size
-                while (i + size < len(a) and 
-                       j + size < len(b) and 
-                       a[i + size] == b[j + size]):
-                    size += 1
-                
-                # Only keep matches that meet minimum size
-                if size >= min_size:
-                    matches.append((i, j, size))
-                    # Skip ahead by the match length to avoid overlapping matches
-                    i += size - 1
-                    break
-        i += 1
+    # Merging logic (adapted from your original code)
+    merged_positions = []
     
-    # Sort matches by position in first string
-    matches.sort()
+    current_a_start = positions_sorted[0][0]
+    current_a_end = positions_sorted[0][1]
+    current_b_start = positions_sorted[0][2]
+    current_b_end = positions_sorted[0][3]
+
+    for i in range(1, len(positions_sorted)):
+        next_a_start, next_a_end, next_b_start, next_b_end = positions_sorted[i]
+
+        # Merge if the next match in text1 starts close to or before the end of the current merged block
+        if (next_a_start - current_a_end) < merge_gap_threshold:
+            # Extend the current merged block.
+            # The end of the merged block becomes the end of the last constituent match.
+            current_a_end = next_a_end
+            current_b_end = next_b_end
+        else:
+            # Gap is too large, finalize the previous merged block
+            merged_positions.append((current_a_start-(min_word_match_length+1), current_a_end-(min_word_match_length+1), current_b_start, current_b_end))
+            # Start a new merged block
+            current_a_start = next_a_start
+            current_a_end = next_a_end
+            current_b_start = next_b_start
+            current_b_end = next_b_end
+
+    # Append the last processed or merged block
+    merged_positions.append((current_a_start, current_a_end, current_b_start, current_b_end))
     
-    # Remove contained matches
-    filtered_matches = []
-    last_end = 0
-    for match in matches:
-        if match[0] >= last_end:
-            filtered_matches.append(match)
-            last_end = match[0] + match[2]
-    
-    return filtered_matches
-
-def findSimilarPatterns(text,text2):
-  positions = []
-  for matched in sorted(get_matching_blocks_fast(text,text2),key=lambda matched:matched[0],reverse=True):
-    text_to_display = text[matched[0]:matched[0]+matched[2]].strip()
-    if len(text_to_display) > 20:
-      positions.append((matched[0],
-                        matched[0]+matched[2],
-                        matched[1],
-                        matched[1]+matched[2]))
-
-
-  positions.sort(key=lambda pair:pair[0])
-
-  if len(positions)==0:
-    return []
-
-  a_start = positions[0][0]
-  a_end = positions[0][1]
-  b_start = positions[0][2]
-  b_end = positions[0][3]
-
-  new_positions = []
-  for i in range(len(positions)):
-    difference_with_prev = positions[i][0] - a_end
-
-    if difference_with_prev < 10:
-      a_end = positions[i][1]
-      b_end = positions[i][3]
-
-    else:
-      new_positions.append((a_start,a_end,b_start,b_end))
-      a_start = positions[i][0]
-      a_end = positions[i][1]
-      b_start = positions[i][2]
-      b_end = positions[i][3]
-
-  new_positions.append((a_start,a_end,b_start,b_end))
-  return new_positions
+    return merged_positions
